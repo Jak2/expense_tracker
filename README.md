@@ -1,6 +1,6 @@
 # Financial Statement Parser
 
-> Extract transactions from bank statement images using AI. Export to Excel/CSV.
+> Extract transactions from bank statements (images & PDFs) using AI. Export to Excel/CSV.
 
 A privacy-first web app that runs entirely in your browser. No server, no database, no data collection.
 
@@ -13,9 +13,10 @@ A privacy-first web app that runs entirely in your browser. No server, no databa
 
 ## Features
 
-- **Drag & Drop Upload** - PNG, JPG, WEBP images, PDF files (max 20MB)
+- **Drag & Drop Upload** - PNG, JPG, WEBP images and PDF files (max 20MB)
+- **PDF Support** - Multi-page PDF processing with pdf.js
 - **In-Browser OCR** - Text extraction using Tesseract.js
-- **AI-Powered Parsing** - Transaction extraction via Google Gemini
+- **AI-Powered Parsing** - Transaction extraction via Google Gemini 2.5 Flash
 - **Editable Results** - Review and correct data before export
 - **Multiple Exports** - CSV and Excel (.xlsx) formats
 - **100% Client-Side** - Your files never leave your browser
@@ -26,7 +27,7 @@ A privacy-first web app that runs entirely in your browser. No server, no databa
 
 ```
 1. Enter Gemini API key (free from Google)
-2. Upload bank statement image
+2. Upload bank statement (image or PDF)
 3. Review extracted transactions
 4. Export to Excel or CSV
 ```
@@ -35,14 +36,15 @@ A privacy-first web app that runs entirely in your browser. No server, no databa
 
 ## Tech Stack
 
-```
-Frontend:     React 18 + Vite
-Styling:      Tailwind CSS
-OCR:          Tesseract.js (WASM)
-AI:           Google Gemini API
-Export:       xlsx + file-saver
-Icons:        Lucide React
-```
+| Technology | Purpose |
+|------------|---------|
+| React 18 + Vite | Frontend framework & build tool |
+| Tailwind CSS | Utility-first styling |
+| Tesseract.js | In-browser OCR (WASM) |
+| pdf.js | PDF to image conversion |
+| Google Gemini 2.5 Flash | AI transaction extraction |
+| xlsx + file-saver | Client-side Excel/CSV export |
+| Lucide React | Icon library |
 
 ---
 
@@ -84,9 +86,9 @@ Output in `dist/` folder. Deploy to any static host.
 
 ```
 src/
-├── components/          # React UI components
-│   ├── ApiKeyInput.jsx     # API key entry form
-│   ├── FileUpload.jsx      # Drag-drop file input
+├── components/              # React UI components
+│   ├── ApiKeyInput.jsx      # API key entry form
+│   ├── FileUpload.jsx       # Drag-drop file input (images + PDF)
 │   ├── ProcessingStatus.jsx # Progress indicator
 │   ├── TransactionTable.jsx # Editable data table
 │   ├── Summary.jsx          # Financial totals
@@ -95,16 +97,17 @@ src/
 │   ├── SettingsModal.jsx    # Key management
 │   └── index.js             # Barrel exports
 │
-├── utils/               # Business logic
-│   ├── storage.js          # localStorage helpers
-│   ├── gemini.js           # Gemini API client
-│   ├── ocr.js              # Tesseract.js wrapper
-│   ├── export.js           # File generation
-│   └── index.js
+├── utils/                   # Business logic
+│   ├── storage.js           # localStorage helpers
+│   ├── gemini.js            # Gemini API client
+│   ├── ocr.js               # Tesseract.js wrapper
+│   ├── pdf.js               # PDF to image conversion
+│   ├── export.js            # File generation
+│   └── index.js             # Barrel exports
 │
-├── App.jsx              # Root component + state
-├── main.jsx             # Entry point
-└── index.css            # Tailwind imports
+├── App.jsx                  # Root component + state
+├── main.jsx                 # Entry point
+└── index.css                # Tailwind imports
 ```
 
 ---
@@ -114,50 +117,43 @@ src/
 ### Processing Pipeline
 
 ```
-┌──────────┐    ┌───────────┐    ┌─────────┐    ┌────────┐
-│  Image   │───▶│  OCR      │───▶│ Gemini  │───▶│ Table  │
-│  Upload  │    │ (Browser) │    │  API    │    │ View   │
-└──────────┘    └───────────┘    └─────────┘    └────────┘
-     │                                               │
-     │                                               ▼
-     │                                         ┌────────┐
-     └─────────────────────────────────────────│ Export │
-                                               └────────┘
+┌─────────────┐    ┌─────────────┐    ┌───────────┐    ┌─────────┐    ┌────────┐
+│   Image/    │───▶│  PDF.js     │───▶│  OCR      │───▶│ Gemini  │───▶│ Table  │
+│    PDF      │    │ (if PDF)    │    │ (Browser) │    │  API    │    │ View   │
+└─────────────┘    └─────────────┘    └───────────┘    └─────────┘    └────────┘
+      │                                                                    │
+      │                                                                    ▼
+      │                                                              ┌────────┐
+      └──────────────────────────────────────────────────────────────│ Export │
+                                                                     └────────┘
 ```
 
 ### Data Flow
 
 ```javascript
-// 1. User uploads image
+// 1. User uploads file (image or PDF)
 onFileSelect(file)
 
-// 2. OCR extracts text
+// 2. If PDF, convert pages to images
+const images = await pdfToImages(file, onProgress)
+
+// 3. OCR extracts text from each page
 const text = await performOCR(file, onProgress)
 
-// 3. AI parses transactions
+// 4. AI parses transactions
 const result = await extractTransactions(text, apiKey)
 // Returns: { transactions: [...], bankName, period }
 
-// 4. Display in table
+// 5. Display in editable table
 setTransactions(result.transactions)
 
-// 5. User exports
+// 6. User exports
 exportToExcel(transactions, filename)
 ```
 
 ---
 
 ## Key Components
-
-### ApiKeyInput.jsx
-
-Handles initial API key setup with validation.
-
-```jsx
-// Validates key format (starts with 'AIza')
-// Tests key against Gemini API
-// Stores in localStorage (obfuscated)
-```
 
 ### FileUpload.jsx
 
@@ -167,6 +163,16 @@ Drag-and-drop file input with validation.
 // Accepts: PNG, JPG, WEBP, PDF
 // Max size: 20MB
 // Provides drag state feedback
+```
+
+### ApiKeyInput.jsx
+
+Handles initial API key setup with validation.
+
+```jsx
+// Validates key format (starts with 'AIza')
+// Tests key against Gemini API
+// Stores in localStorage (obfuscated)
 ```
 
 ### TransactionTable.jsx
@@ -183,14 +189,28 @@ Editable table with sorting.
 
 ## Utils API
 
-### storage.js
+### pdf.js
 
 ```javascript
-saveApiKey(key)      // Save to localStorage
-getApiKey()          // Retrieve key
-hasApiKey()          // Check if exists
-removeApiKey()       // Delete key
-isValidKeyFormat(key) // Validate format
+import { pdfToImages, isPDF, getPDFPageCount } from './utils/pdf'
+
+// Convert PDF to images for OCR
+const images = await pdfToImages(file, onProgress)
+
+// Check if file is PDF
+const isPdfFile = isPDF(file)
+
+// Get page count
+const pages = await getPDFPageCount(file)
+```
+
+### ocr.js
+
+```javascript
+// Perform OCR on image or PDF file
+const text = await performOCR(file, onProgress)
+// Handles both images and multi-page PDFs
+// onProgress: (percent) => void
 ```
 
 ### gemini.js
@@ -204,27 +224,22 @@ const result = await extractTransactions(ocrText, apiKey)
 const { valid, error } = await testApiKey(apiKey)
 ```
 
-### ocr.js
+### storage.js
 
 ```javascript
-// Perform OCR on image file
-const text = await performOCR(file, onProgress)
-// onProgress: (percent) => void
+saveApiKey(key)       // Save to localStorage
+getApiKey()           // Retrieve key
+hasApiKey()           // Check if exists
+removeApiKey()        // Delete key
+isValidKeyFormat(key) // Validate format
 ```
 
 ### export.js
 
 ```javascript
-// Export to CSV
 exportToCSV(transactions, filename)
-
-// Export to Excel
 exportToExcel(transactions, filename)
-
-// Calculate summary
 const { totalDebit, totalCredit, netFlow, count } = calculateSummary(transactions)
-
-// Format helpers
 formatCurrency(amount, 'INR')
 formatDate(dateString)
 ```
@@ -248,7 +263,8 @@ POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:ge
   }],
   generationConfig: {
     temperature: 0.1,
-    maxOutputTokens: 8192
+    maxOutputTokens: 16384,
+    responseMimeType: 'application/json'
   }
 }
 ```
@@ -263,8 +279,7 @@ POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:ge
       "description": "AMAZON PAY",
       "debit": 2499.00,
       "credit": null,
-      "balance": 45000.00,
-      "reference": "UTR123456"
+      "balance": 45000.00
     }
   ],
   "bankName": "HDFC Bank",
@@ -276,7 +291,7 @@ POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:ge
 
 ## State Management
 
-Uses React's `useState` for simplicity. State structure:
+Uses React's `useState` for simplicity:
 
 ```javascript
 // Auth
@@ -297,30 +312,6 @@ const [period, setPeriod] = useState(null)
 
 ---
 
-## Styling
-
-Uses Tailwind CSS with default configuration.
-
-### Color Palette
-
-```
-Primary:    blue-600
-Success:    green-600
-Error:      red-600
-Muted:      gray-500
-Background: gray-50
-```
-
-### Responsive Breakpoints
-
-```
-sm: 640px   (mobile landscape)
-md: 768px   (tablet)
-lg: 1024px  (desktop)
-```
-
----
-
 ## Error Handling
 
 ### User Errors
@@ -331,7 +322,8 @@ lg: 1024px  (desktop)
 | File too large | "File too large. Maximum size is 20MB" |
 | Invalid API key | Specific message from Google API |
 | OCR failed | "Could not extract text. Please use a clearer image" |
-| No transactions | "No transactions found. Please try a clearer image" |
+| No transactions | "No transactions found in the document" |
+| Truncated response | Partial results salvaged when possible |
 
 ### API Errors
 
@@ -348,7 +340,7 @@ lg: 1024px  (desktop)
 
 ---
 
-## Security Considerations
+## Security & Privacy
 
 ### API Key Storage
 
@@ -358,12 +350,13 @@ lg: 1024px  (desktop)
 const encoded = btoa(key.split('').reverse().join(''))
 ```
 
-**Note:** This prevents casual inspection but is NOT secure encryption. API keys in browser apps are inherently exposed.
+**Note:** This prevents casual inspection but is NOT secure encryption.
 
 ### Data Privacy
 
 - Files processed entirely in browser
 - OCR runs in Web Worker (Tesseract.js)
+- PDF conversion happens client-side (pdf.js)
 - Only extracted text sent to Gemini API
 - No data stored on any server
 - No analytics or tracking
@@ -374,16 +367,13 @@ const encoded = btoa(key.split('').reverse().join(''))
 
 | Browser | Supported |
 |---------|-----------|
-| Chrome 90+ | ✅ |
-| Firefox 90+ | ✅ |
-| Safari 15+ | ✅ |
-| Edge 90+ | ✅ |
-| Mobile browsers | ✅ |
+| Chrome 90+ | Yes |
+| Firefox 90+ | Yes |
+| Safari 15+ | Yes |
+| Edge 90+ | Yes |
+| Mobile browsers | Yes |
 
-Requires:
-- ES2020 support
-- Web Workers
-- Fetch API
+Requires: ES2020, Web Workers, Fetch API
 
 ---
 
@@ -394,28 +384,17 @@ Requires:
 ```
 React + ReactDOM:  ~45 KB (gzipped)
 Tesseract.js:      ~800 KB (lazy loaded)
+pdf.js:            ~400 KB (lazy loaded)
 xlsx:              ~200 KB (lazy loaded)
-App code:          ~25 KB
+App code:          ~30 KB
 Tailwind:          ~10 KB (purged)
 ```
 
-### OCR Performance
+### Processing Performance
 
-- First run: 5-10 seconds (downloads language data)
-- Subsequent: 2-5 seconds per image
-- Cached in browser
-
----
-
-## Scripts
-
-```json
-{
-  "dev": "vite",              // Start dev server
-  "build": "vite build",      // Production build
-  "preview": "vite preview"   // Preview build locally
-}
-```
+- **Images**: 2-5 seconds OCR per image
+- **PDFs**: 1-2 seconds per page (conversion) + OCR time
+- First OCR run downloads language data (~5-10 seconds)
 
 ---
 
@@ -452,6 +431,18 @@ EXPOSE 80
 
 ---
 
+## Scripts
+
+```json
+{
+  "dev": "vite",
+  "build": "vite build",
+  "preview": "vite preview"
+}
+```
+
+---
+
 ## Contributing
 
 1. Fork the repository
@@ -471,9 +462,8 @@ MIT License - use it however you want.
 ## Acknowledgments
 
 - [Tesseract.js](https://tesseract.projectnaptha.com/) - OCR engine
+- [pdf.js](https://mozilla.github.io/pdf.js/) - PDF rendering
 - [Google Gemini](https://ai.google.dev/) - AI extraction
 - [Tailwind CSS](https://tailwindcss.com/) - Styling
 - [Lucide](https://lucide.dev/) - Icons
 - [SheetJS](https://sheetjs.com/) - Excel generation
-#   e x p e n s e _ t r a c k e r  
- 

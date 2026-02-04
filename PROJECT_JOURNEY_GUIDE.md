@@ -44,7 +44,8 @@ npm run dev
 | **Build Tool** | Vite | Lightning fast dev server, optimized builds |
 | **Styling** | Tailwind CSS | Utility-first, rapid prototyping, small bundle |
 | **OCR Engine** | Tesseract.js | Runs in browser, no server needed, free |
-| **AI/LLM** | Google Gemini | Free tier, fast, good at structured extraction |
+| **PDF Processing** | pdf.js | Client-side PDF to image conversion |
+| **AI/LLM** | Google Gemini 2.5 Flash | Free tier, fast, good at structured extraction |
 | **Export** | xlsx + file-saver | Client-side Excel/CSV generation |
 | **Icons** | Lucide React | Clean, consistent, lightweight |
 
@@ -61,51 +62,57 @@ npm run dev
 ### System Overview
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        USER'S BROWSER                        │
-│                                                              │
-│  ┌─────────────────────────────────────────────────────────┐│
-│  │                     React App                           ││
-│  │  ┌───────────┐ ┌───────────┐ ┌───────────┐             ││
-│  │  │  Upload   │ │  Results  │ │  Export   │             ││
-│  │  │   Page    │ │   Table   │ │  Buttons  │             ││
-│  │  └─────┬─────┘ └─────▲─────┘ └─────┬─────┘             ││
-│  │        │             │             │                    ││
-│  │        ▼             │             ▼                    ││
-│  │  ┌───────────────────┴───────────────────┐             ││
-│  │  │           App State (useState)         │             ││
-│  │  └───────────────────┬───────────────────┘             ││
-│  └──────────────────────┼──────────────────────────────────┘│
-│                         │                                    │
-│  ┌──────────────────────┼──────────────────────────────────┐│
-│  │                Processing Pipeline                       ││
-│  │                      │                                   ││
-│  │     ┌────────────────┼────────────────┐                 ││
-│  │     ▼                ▼                ▼                 ││
-│  │  ┌──────┐      ┌──────────┐     ┌──────────┐           ││
-│  │  │ File │      │Tesseract │     │  Gemini  │           ││
-│  │  │Upload│ ───▶ │   OCR    │ ──▶ │   API    │           ││
-│  │  └──────┘      └──────────┘     └────┬─────┘           ││
-│  │                                       │                  ││
-│  │                                       ▼                  ││
-│  │                              ┌──────────────┐            ││
-│  │                              │ Transactions │            ││
-│  │                              │    Array     │            ││
-│  │                              └──────────────┘            ││
-│  └──────────────────────────────────────────────────────────┘│
-│                                                              │
-│  ┌──────────────────────────────────────────────────────────┐│
-│  │                    localStorage                          ││
-│  │  • API Key (obfuscated)                                  ││
-│  └──────────────────────────────────────────────────────────┘│
-└──────────────────────────────────────────────────────────────┘
-                              │
-                              │ HTTPS
-                              ▼
-                 ┌────────────────────────┐
-                 │   Google Gemini API    │
-                 │  (External Service)    │
-                 └────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                         USER'S BROWSER                           │
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │                      React App                               ││
+│  │  ┌───────────┐  ┌───────────┐  ┌───────────┐               ││
+│  │  │  Upload   │  │  Results  │  │  Export   │               ││
+│  │  │   Page    │  │   Table   │  │  Buttons  │               ││
+│  │  └─────┬─────┘  └─────▲─────┘  └─────┬─────┘               ││
+│  │        │              │              │                      ││
+│  │        ▼              │              ▼                      ││
+│  │  ┌────────────────────┴────────────────────┐               ││
+│  │  │            App State (useState)          │               ││
+│  │  └────────────────────┬────────────────────┘               ││
+│  └───────────────────────┼─────────────────────────────────────┘│
+│                          │                                      │
+│  ┌───────────────────────┼─────────────────────────────────────┐│
+│  │                 Processing Pipeline                          ││
+│  │                       │                                      ││
+│  │    ┌──────────────────┼──────────────────────┐              ││
+│  │    ▼                  ▼                      ▼              ││
+│  │  ┌──────┐       ┌──────────┐          ┌──────────┐         ││
+│  │  │ File │       │  PDF.js  │          │Tesseract │         ││
+│  │  │Upload│ ────▶ │(if PDF)  │ ───────▶ │   OCR    │         ││
+│  │  └──────┘       └──────────┘          └────┬─────┘         ││
+│  │                                             │                ││
+│  │                                             ▼                ││
+│  │                                       ┌──────────┐          ││
+│  │                                       │  Gemini  │          ││
+│  │                                       │   API    │          ││
+│  │                                       └────┬─────┘          ││
+│  │                                             │                ││
+│  │                                             ▼                ││
+│  │                                    ┌──────────────┐          ││
+│  │                                    │ Transactions │          ││
+│  │                                    │    Array     │          ││
+│  │                                    └──────────────┘          ││
+│  └──────────────────────────────────────────────────────────────┘│
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────────┐│
+│  │                      localStorage                             ││
+│  │  • API Key (obfuscated)                                      ││
+│  └──────────────────────────────────────────────────────────────┘│
+└──────────────────────────────────────────────────────────────────┘
+                               │
+                               │ HTTPS
+                               ▼
+                  ┌────────────────────────┐
+                  │   Google Gemini API    │
+                  │  (gemini-2.5-flash)    │
+                  └────────────────────────┘
 ```
 
 ### Data Flow
@@ -122,18 +129,26 @@ USER JOURNEY:
    │         │
    └─────────┴─▶ Show Upload Screen
 
-2. UPLOAD FILE
+2. UPLOAD FILE (Image or PDF)
    │
-   ├─▶ Validate (type, size)
+   ├─▶ Validate (type, size ≤ 20MB)
    │         │
    │        Pass
    │         ▼
+   ├─▶ Is PDF?
+   │      │
+   │     Yes ──▶ PDF.js converts pages to images
+   │      │
+   │     No
+   │      │
+   │      ▼
    ├─▶ Tesseract.js OCR
-   │   └─▶ Extract text from image
+   │   └─▶ Extract text from image(s)
    │         │
    │         ▼
-   ├─▶ Gemini API
+   ├─▶ Gemini API (gemini-2.5-flash)
    │   └─▶ Parse text into structured JSON
+   │   └─▶ Uses responseMimeType: 'application/json'
    │         │
    │         ▼
    └─▶ Display Results Table
@@ -163,7 +178,7 @@ expenses/
 ├── src/
 │   ├── components/           # UI Components
 │   │   ├── ApiKeyInput.jsx   # API key entry screen
-│   │   ├── FileUpload.jsx    # Drag & drop upload
+│   │   ├── FileUpload.jsx    # Drag & drop upload (images + PDF)
 │   │   ├── ProcessingStatus.jsx
 │   │   ├── TransactionTable.jsx
 │   │   ├── Summary.jsx       # Financial totals
@@ -174,10 +189,11 @@ expenses/
 │   │
 │   ├── utils/                # Business Logic
 │   │   ├── storage.js        # localStorage helpers
-│   │   ├── gemini.js         # API integration
-│   │   ├── ocr.js            # Tesseract wrapper
+│   │   ├── gemini.js         # Gemini API integration
+│   │   ├── ocr.js            # Tesseract wrapper (handles images + PDFs)
+│   │   ├── pdf.js            # PDF to image conversion
 │   │   ├── export.js         # CSV/Excel generation
-│   │   └── index.js
+│   │   └── index.js          # Barrel exports
 │   │
 │   ├── App.jsx               # Main app + state
 │   ├── main.jsx              # Entry point
@@ -194,18 +210,20 @@ expenses/
 
 ## Development Phases
 
-### Phase 1: Core MVP (Current)
+### Phase 1: Core MVP (Complete)
 - [x] API key input & validation
 - [x] Image upload (drag & drop)
-- [x] PDF support (using pdf.js)
+- [x] PDF support (multi-page with pdf.js)
 - [x] OCR with Tesseract.js
-- [x] AI extraction with Gemini
+- [x] AI extraction with Gemini 2.5 Flash
+- [x] JSON response mode for reliable parsing
+- [x] Truncated response handling
 - [x] Editable results table
 - [x] CSV/Excel export
 - [x] Responsive design
 
 ### Phase 2: Enhancements
-- [ ] Multiple file upload
+- [ ] Multiple file upload (batch processing)
 - [ ] Transaction categorization
 - [ ] Dark mode
 - [ ] PWA (offline support)
@@ -215,6 +233,52 @@ expenses/
 - [ ] Charts & analytics
 - [ ] Custom export templates
 - [ ] Multi-language OCR
+
+---
+
+## Key Implementation Details
+
+### PDF Processing Flow
+```javascript
+// pdf.js handles PDF to image conversion
+import { pdfToImages, isPDF } from './utils/pdf'
+
+// In ocr.js - unified handling
+if (isPDF(file)) {
+  // Convert PDF pages to images (30% of progress)
+  const images = await pdfToImages(file, onProgress)
+
+  // OCR each page image (70% of progress)
+  for (const image of images) {
+    const pageText = await Tesseract.recognize(image, 'eng')
+    allText += pageText + '\n\n'
+  }
+} else {
+  // Direct image OCR
+  allText = await Tesseract.recognize(file, 'eng')
+}
+```
+
+### Gemini API Configuration
+```javascript
+// Using JSON response mode for reliable output
+generationConfig: {
+  temperature: 0.1,           // Low for consistent output
+  maxOutputTokens: 16384,     // Large for many transactions
+  responseMimeType: 'application/json'  // Forces pure JSON
+}
+```
+
+### Truncated Response Handling
+```javascript
+// If Gemini response is cut off mid-JSON
+// Find last complete transaction and close structure
+const lastCompleteObj = json.lastIndexOf('},')
+if (lastCompleteObj !== -1) {
+  fixedJson = json.slice(0, lastCompleteObj + 1) +
+              '],"bankName":null,"period":null}'
+}
+```
 
 ---
 
@@ -303,16 +367,6 @@ Offer your extraction as an API:
 
 **Requires:** Backend server, but high margin potential.
 
-### Strategy 4: Affiliate/Referral
-
-```
-Partner with:
-├── Accounting software (QuickBooks, Xero)
-├── Tax preparation services
-├── Bookkeeping services
-└── Get referral fees
-```
-
 ---
 
 ## Monetization Timeline
@@ -327,7 +381,7 @@ Partner with:
 ### Key Metrics to Track
 - Daily active users
 - Extractions per user
-- Free → Paid conversion rate
+- Free to Paid conversion rate
 - Export completion rate
 
 ---
@@ -384,6 +438,9 @@ Partner with:
 
 ## Success Checklist
 
+- [x] Core functionality works
+- [x] PDF support added
+- [x] Error handling for truncated responses
 - [ ] App works on mobile
 - [ ] Error messages are helpful
 - [ ] Loading states are clear
@@ -395,11 +452,35 @@ Partner with:
 
 ---
 
+## Troubleshooting
+
+### Common Issues
+
+| Issue | Solution |
+|-------|----------|
+| PDF worker fails | Check CDN URL, try hard refresh |
+| Gemini response truncated | Uses JSON response mode + salvage logic |
+| OCR quality poor | Recommend clearer images, higher resolution |
+| API key rejected | Verify key starts with 'AIza', ~39 chars |
+| CORS errors | Gemini API allows browser requests directly |
+
+### Debug Tips
+```javascript
+// Check browser console for detailed errors
+console.error('Parse error:', e, 'Original text:', text)
+
+// Verify PDF.js version matches CDN
+console.log('pdf.js version:', pdfjsLib.version)
+```
+
+---
+
 ## Resources
 
 - [Vite Documentation](https://vitejs.dev/)
 - [Tailwind CSS](https://tailwindcss.com/docs)
 - [Tesseract.js](https://tesseract.projectnaptha.com/)
+- [pdf.js](https://mozilla.github.io/pdf.js/)
 - [Google Gemini API](https://ai.google.dev/docs)
 - [Vercel Deployment](https://vercel.com/docs)
 
@@ -411,4 +492,4 @@ Questions? Issues?
 - Open an issue on GitHub
 - Email: your-email@example.com
 
-Good luck with your launch! 🚀
+Good luck with your launch!
