@@ -8,13 +8,37 @@ const GEMINI_API_URL =
 /**
  * Extract transactions from OCR text using Gemini
  */
+// Category definitions for classification
+const CATEGORIES = [
+  'Food & Dining',
+  'Shopping',
+  'Transport',
+  'Utilities',
+  'Entertainment',
+  'Healthcare',
+  'Education',
+  'Subscriptions',
+  'Rent & Housing',
+  'Insurance',
+  'Transfers',
+  'Income',
+  'ATM',
+  'Other'
+]
+
 export async function extractTransactions(ocrText, apiKey) {
   // Limit OCR text to avoid token limits
   const truncatedText = ocrText.slice(0, 8000)
 
   const prompt = `Parse this bank statement and return JSON only.
 
-Format: {"transactions":[{"date":"YYYY-MM-DD","description":"text","debit":number|null,"credit":number|null,"balance":number|null}],"bankName":"name|null","period":"period|null"}
+Rules:
+1. Classify each transaction into one category: ${CATEGORIES.join(', ')}
+2. Mark costType as "fixed" for recurring bills (rent, insurance, subscriptions, utilities) or "variable" for discretionary spending
+3. Use YYYY-MM-DD date format
+4. Use numbers only for amounts (no currency symbols)
+
+Format: {"transactions":[{"date":"YYYY-MM-DD","description":"text","debit":number|null,"credit":number|null,"balance":number|null,"category":"category","costType":"fixed|variable"}],"bankName":"name|null","period":"period|null"}
 
 Text:
 ${truncatedText}
@@ -118,7 +142,7 @@ JSON:`
     throw new Error('Invalid response format. Please try again.')
   }
 
-  // Add IDs to transactions
+  // Add IDs to transactions and ensure category/costType
   const transactions = (result.transactions || []).map((t, i) => ({
     id: `txn_${Date.now()}_${i}`,
     date: t.date || '',
@@ -127,6 +151,8 @@ JSON:`
     credit: t.credit,
     balance: t.balance,
     reference: t.reference,
+    category: t.category || 'Other',
+    costType: t.costType || 'variable',
   }))
 
   if (transactions.length === 0) {

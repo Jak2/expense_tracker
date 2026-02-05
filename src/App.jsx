@@ -10,6 +10,7 @@ import Summary from './components/Summary'
 import TransactionTable from './components/TransactionTable'
 import ExportButtons from './components/ExportButtons'
 import SettingsModal from './components/SettingsModal'
+import { AnalyticsDashboard } from './components/charts'
 
 // Utils
 import { hasApiKey, getApiKey } from './utils/storage'
@@ -192,12 +193,12 @@ export default function App() {
                   <RotateCcw className="w-4 h-4" />
                   New Upload
                 </button>
-                <ExportButtons transactions={transactions} />
+                <ExportButtons transactions={transactions} bankName={bankName} period={period} />
               </div>
             </div>
 
-            {/* Summary */}
-            <Summary
+            {/* Analytics Dashboard */}
+            <AnalyticsDashboard
               transactions={transactions}
               bankName={bankName}
               period={period}
