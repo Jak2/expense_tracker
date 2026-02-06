@@ -1,11 +1,12 @@
 import { useState, useCallback } from 'react'
-import { Upload, Image, FileText, AlertCircle } from 'lucide-react'
+import { Upload, Image, FileText, AlertCircle, Plus } from 'lucide-react'
 
 /**
  * File Upload Component
  * Drag and drop or click to upload bank statement images or PDFs
+ * Supports multiple file selection
  */
-export default function FileUpload({ onFileSelect, disabled }) {
+export default function FileUpload({ onFileSelect, onFilesSelect, disabled, multiple = false, compact = false }) {
   const [isDragging, setIsDragging] = useState(false)
   const [error, setError] = useState('')
 
@@ -23,24 +24,36 @@ export default function FileUpload({ onFileSelect, disabled }) {
     return null
   }
 
-  const handleFile = useCallback((file) => {
+  const handleFiles = useCallback((files) => {
     setError('')
-    const validationError = validateFile(file)
-    if (validationError) {
-      setError(validationError)
-      return
+    const validFiles = []
+
+    for (const file of files) {
+      const validationError = validateFile(file)
+      if (validationError) {
+        setError(validationError)
+        return
+      }
+      validFiles.push(file)
     }
-    onFileSelect(file)
-  }, [onFileSelect])
+
+    if (validFiles.length > 0) {
+      if (multiple && onFilesSelect) {
+        onFilesSelect(validFiles)
+      } else if (onFileSelect) {
+        onFileSelect(validFiles[0])
+      }
+    }
+  }, [onFileSelect, onFilesSelect, multiple])
 
   const handleDrop = useCallback((e) => {
     e.preventDefault()
     setIsDragging(false)
     if (disabled) return
 
-    const file = e.dataTransfer.files[0]
-    if (file) handleFile(file)
-  }, [disabled, handleFile])
+    const files = Array.from(e.dataTransfer.files)
+    if (files.length > 0) handleFiles(multiple ? files : [files[0]])
+  }, [disabled, handleFiles, multiple])
 
   const handleDragOver = useCallback((e) => {
     e.preventDefault()
@@ -53,10 +66,36 @@ export default function FileUpload({ onFileSelect, disabled }) {
   }, [])
 
   const handleInputChange = useCallback((e) => {
-    const file = e.target.files?.[0]
-    if (file) handleFile(file)
+    const files = Array.from(e.target.files || [])
+    if (files.length > 0) handleFiles(files)
     e.target.value = '' // Reset to allow same file selection
-  }, [handleFile])
+  }, [handleFiles])
+
+  // Compact version for "Add More" functionality
+  if (compact) {
+    return (
+      <label
+        className={`
+          flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl
+          border border-dashed border-blue-300 bg-blue-50
+          text-sm font-medium text-blue-600
+          cursor-pointer transition-colors
+          ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-100 hover:border-blue-400'}
+        `}
+      >
+        <Plus className="w-4 h-4" />
+        Add More Files
+        <input
+          type="file"
+          className="hidden"
+          accept="image/png,image/jpeg,image/jpg,image/webp,application/pdf,.pdf"
+          onChange={handleInputChange}
+          disabled={disabled}
+          multiple={multiple}
+        />
+      </label>
+    )
+  }
 
   return (
     <div className="w-full">
@@ -89,11 +128,11 @@ export default function FileUpload({ onFileSelect, disabled }) {
           </div>
 
           <p className="text-lg font-medium text-gray-900 mb-2">
-            {isDragging ? 'Drop your file here' : 'Drop your bank statement here'}
+            {isDragging ? 'Drop your files here' : 'Drop your bank statements here'}
           </p>
 
           <p className="text-sm text-gray-500 mb-4">
-            or click to browse files
+            {multiple ? 'Select one or multiple files' : 'or click to browse files'}
           </p>
 
           <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-gray-400">
@@ -107,7 +146,7 @@ export default function FileUpload({ onFileSelect, disabled }) {
               PDF
             </span>
             <span>•</span>
-            <span>Max 20MB</span>
+            <span>Max 20MB each</span>
           </div>
         </div>
 
@@ -117,6 +156,7 @@ export default function FileUpload({ onFileSelect, disabled }) {
           accept="image/png,image/jpeg,image/jpg,image/webp,application/pdf,.pdf"
           onChange={handleInputChange}
           disabled={disabled}
+          multiple={multiple}
         />
       </label>
 

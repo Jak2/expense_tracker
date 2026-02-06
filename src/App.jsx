@@ -1,12 +1,11 @@
 import { useState, useCallback } from 'react'
-import { RotateCcw } from 'lucide-react'
+import { RotateCcw, Plus, Loader2 } from 'lucide-react'
 
 // Components
 import ApiKeyInput from './components/ApiKeyInput'
 import Header from './components/Header'
 import FileUpload from './components/FileUpload'
 import ProcessingStatus from './components/ProcessingStatus'
-import Summary from './components/Summary'
 import TransactionTable from './components/TransactionTable'
 import ExportButtons from './components/ExportButtons'
 import SettingsModal from './components/SettingsModal'
@@ -27,19 +26,50 @@ export default function App() {
 
   // UI state
   const [showSettings, setShowSettings] = useState(false)
+  const [isAddingMore, setIsAddingMore] = useState(false)
 
   // Processing state
   const [status, setStatus] = useState('idle') // idle, reading, ocr, extracting, complete, error
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState(null)
+  const [processingFile, setProcessingFile] = useState(null) // Current file being processed
 
   // Data state
   const [transactions, setTransactions] = useState([])
   const [bankName, setBankName] = useState(null)
   const [period, setPeriod] = useState(null)
+  const [filesProcessed, setFilesProcessed] = useState(0)
 
   /**
-   * Process uploaded file
+   * Process a single file and return transactions
+   */
+  const processFileInternal = async (file) => {
+    setProcessingFile(file.name)
+
+    // Step 1: OCR
+    setStatus('ocr')
+    const ocrText = await performOCR(file, (p) => {
+      setProgress(10 + Math.round(p * 0.4)) // 10-50%
+    })
+    setProgress(50)
+
+    // Step 2: Extract with AI
+    setStatus('extracting')
+    setProgress(55)
+
+    const apiKey = getApiKey()
+    if (!apiKey) {
+      throw new Error('API key not found. Please add your key.')
+    }
+
+    const result = await extractTransactions(ocrText, apiKey)
+    setProgress(90)
+
+    return result
+  }
+
+  /**
+   * Process uploaded file(s)
    */
   const processFile = useCallback(async (file) => {
     // Reset state
@@ -49,26 +79,10 @@ export default function App() {
     setTransactions([])
     setBankName(null)
     setPeriod(null)
+    setFilesProcessed(0)
 
     try {
-      // Step 1: OCR
-      setStatus('ocr')
-      const ocrText = await performOCR(file, (p) => {
-        setProgress(10 + Math.round(p * 0.4)) // 10-50%
-      })
-      setProgress(50)
-
-      // Step 2: Extract with AI
-      setStatus('extracting')
-      setProgress(55)
-
-      const apiKey = getApiKey()
-      if (!apiKey) {
-        throw new Error('API key not found. Please add your key.')
-      }
-
-      const result = await extractTransactions(ocrText, apiKey)
-      setProgress(90)
+      const result = await processFileInternal(file)
 
       // Validate results
       if (!result.transactions || result.transactions.length === 0) {
@@ -79,14 +93,72 @@ export default function App() {
       setTransactions(result.transactions)
       setBankName(result.bankName)
       setPeriod(result.period)
+      setFilesProcessed(1)
       setStatus('complete')
       setProgress(100)
 
     } catch (err) {
       setError(err.message || 'Something went wrong. Please try again.')
       setStatus('error')
+    } finally {
+      setProcessingFile(null)
     }
   }, [])
+
+  /**
+   * Process additional files and append to existing transactions
+   */
+  const processAdditionalFiles = useCallback(async (files) => {
+    setIsAddingMore(true)
+    setError(null)
+
+    try {
+      let newTransactions = []
+      let newBankName = bankName
+      let newPeriod = period
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]
+        setProcessingFile(file.name)
+        setProgress(Math.round((i / files.length) * 100))
+
+        try {
+          const result = await processFileInternal(file)
+
+          if (result.transactions && result.transactions.length > 0) {
+            // Add unique IDs with file index to avoid conflicts
+            const txnsWithIds = result.transactions.map((t, idx) => ({
+              ...t,
+              id: `txn_${Date.now()}_${filesProcessed + i}_${idx}`
+            }))
+            newTransactions = [...newTransactions, ...txnsWithIds]
+
+            // Update bank name and period if not set
+            if (!newBankName && result.bankName) newBankName = result.bankName
+            if (!newPeriod && result.period) newPeriod = result.period
+          }
+        } catch (err) {
+          console.error(`Error processing ${file.name}:`, err)
+          // Continue with other files
+        }
+      }
+
+      if (newTransactions.length > 0) {
+        setTransactions(prev => [...prev, ...newTransactions])
+        setFilesProcessed(prev => prev + files.length)
+        if (newBankName) setBankName(newBankName)
+        if (newPeriod) setPeriod(newPeriod)
+      }
+
+      setProgress(100)
+    } catch (err) {
+      setError(err.message || 'Error adding files.')
+    } finally {
+      setIsAddingMore(false)
+      setProcessingFile(null)
+      setStatus('complete')
+    }
+  }, [bankName, period, filesProcessed])
 
   /**
    * Reset to initial state
@@ -98,6 +170,8 @@ export default function App() {
     setTransactions([])
     setBankName(null)
     setPeriod(null)
+    setFilesProcessed(0)
+    setProcessingFile(null)
   }, [])
 
   /**
@@ -145,16 +219,23 @@ export default function App() {
                 Upload Bank Statement
               </h1>
               <p className="text-gray-600">
-                Drop your bank statement image to extract transactions
+                Drop your bank statement images or PDFs to extract transactions
               </p>
             </div>
-            <FileUpload onFileSelect={processFile} disabled={isProcessing} />
+            <FileUpload onFileSelect={processFile} disabled={isProcessing} multiple={false} />
           </div>
         )}
 
         {/* Processing Section */}
         {isProcessing && (
-          <ProcessingStatus status={status} progress={progress} error={error} />
+          <div>
+            <ProcessingStatus status={status} progress={progress} error={error} />
+            {processingFile && (
+              <p className="text-center text-sm text-gray-500 mt-2">
+                Processing: {processingFile}
+              </p>
+            )}
+          </div>
         )}
 
         {/* Error with Retry */}
@@ -181,11 +262,42 @@ export default function App() {
                   Extracted Transactions
                 </h1>
                 <p className="text-sm text-gray-500">
-                  Review, edit, then export
+                  {transactions.length} transactions from {filesProcessed} file{filesProcessed > 1 ? 's' : ''} • Review, edit, then export
                 </p>
               </div>
 
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                {/* Add More Button */}
+                <label
+                  className={`
+                    flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl
+                    border border-dashed border-blue-300 bg-blue-50
+                    text-sm font-medium text-blue-600
+                    cursor-pointer transition-colors
+                    ${isAddingMore ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-100 hover:border-blue-400'}
+                  `}
+                >
+                  {isAddingMore ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Plus className="w-4 h-4" />
+                  )}
+                  Add More
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept="image/png,image/jpeg,image/jpg,image/webp,application/pdf,.pdf"
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files || [])
+                      if (files.length > 0) processAdditionalFiles(files)
+                      e.target.value = ''
+                    }}
+                    disabled={isAddingMore}
+                    multiple
+                  />
+                </label>
+
+                {/* New Upload Button */}
                 <button
                   onClick={reset}
                   className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-gray-300 hover:bg-gray-100 text-sm font-medium transition-colors"
@@ -193,9 +305,24 @@ export default function App() {
                   <RotateCcw className="w-4 h-4" />
                   New Upload
                 </button>
+
+                {/* Export Buttons */}
                 <ExportButtons transactions={transactions} bankName={bankName} period={period} />
               </div>
             </div>
+
+            {/* Adding More Indicator */}
+            {isAddingMore && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center gap-3">
+                <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+                <div>
+                  <p className="text-sm font-medium text-blue-900">Processing additional files...</p>
+                  {processingFile && (
+                    <p className="text-xs text-blue-600">{processingFile}</p>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Analytics Dashboard */}
             <AnalyticsDashboard
