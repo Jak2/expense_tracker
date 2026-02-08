@@ -2,6 +2,21 @@
 
 All notable changes to the Financial Statement Parser project are documented in this file.
 
+## [1.3.1] - 2024-XX-XX
+
+### Fixed
+- **Add More Files Bug**: Fixed critical issue where adding a second file would replace the first file's data instead of merging
+  - Root cause: `processFileInternal` was changing global `status` state, causing UI to re-render and lose context
+  - Solution: Added `updateStatus` parameter to `processFileInternal` - when `false`, status remains 'complete' and results stay visible
+  - Now properly captures current transactions before processing and merges new transactions correctly
+  - Added `transactions` to `useCallback` dependency array for proper closure handling
+
+### Changed
+- `processFileInternal()` now accepts optional `updateStatus` parameter (default: `true`)
+- `processAdditionalFiles()` preserves existing transactions during "Add More" processing
+
+---
+
 ## [1.3.0] - 2024-XX-XX
 
 ### Added
@@ -141,6 +156,7 @@ All notable changes to the Financial Statement Parser project are documented in 
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| 1.3.1 | TBD | Bug fix: Add More files now properly merges data |
 | 1.3.0 | TBD | Multiple files, Charts, Enhanced exports |
 | 1.2.0 | TBD | Categories, Cost types, PDF export |
 | 1.1.0 | TBD | PDF support |

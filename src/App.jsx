@@ -42,19 +42,21 @@ export default function App() {
 
   /**
    * Process a single file and return transactions
+   * @param {File} file - The file to process
+   * @param {boolean} updateStatus - Whether to update global status (false for "Add More")
    */
-  const processFileInternal = async (file) => {
+  const processFileInternal = async (file, updateStatus = true) => {
     setProcessingFile(file.name)
 
     // Step 1: OCR
-    setStatus('ocr')
+    if (updateStatus) setStatus('ocr')
     const ocrText = await performOCR(file, (p) => {
       setProgress(10 + Math.round(p * 0.4)) // 10-50%
     })
     setProgress(50)
 
     // Step 2: Extract with AI
-    setStatus('extracting')
+    if (updateStatus) setStatus('extracting')
     setProgress(55)
 
     const apiKey = getApiKey()
@@ -112,6 +114,9 @@ export default function App() {
     setIsAddingMore(true)
     setError(null)
 
+    // Store current transactions to ensure we preserve them
+    const currentTransactions = [...transactions]
+
     try {
       let newTransactions = []
       let newBankName = bankName
@@ -120,16 +125,17 @@ export default function App() {
       for (let i = 0; i < files.length; i++) {
         const file = files[i]
         setProcessingFile(file.name)
-        setProgress(Math.round((i / files.length) * 100))
+        setProgress(Math.round(((i + 1) / files.length) * 100))
 
         try {
-          const result = await processFileInternal(file)
+          // Pass false to NOT update global status (keeps results visible)
+          const result = await processFileInternal(file, false)
 
           if (result.transactions && result.transactions.length > 0) {
             // Add unique IDs with file index to avoid conflicts
             const txnsWithIds = result.transactions.map((t, idx) => ({
               ...t,
-              id: `txn_${Date.now()}_${filesProcessed + i}_${idx}`
+              id: `txn_${Date.now()}_${filesProcessed + i + 1}_${idx}`
             }))
             newTransactions = [...newTransactions, ...txnsWithIds]
 
@@ -144,10 +150,11 @@ export default function App() {
       }
 
       if (newTransactions.length > 0) {
-        setTransactions(prev => [...prev, ...newTransactions])
+        // Merge current transactions with new ones
+        setTransactions([...currentTransactions, ...newTransactions])
         setFilesProcessed(prev => prev + files.length)
-        if (newBankName) setBankName(newBankName)
-        if (newPeriod) setPeriod(newPeriod)
+        if (newBankName && !bankName) setBankName(newBankName)
+        if (newPeriod && !period) setPeriod(newPeriod)
       }
 
       setProgress(100)
@@ -156,9 +163,8 @@ export default function App() {
     } finally {
       setIsAddingMore(false)
       setProcessingFile(null)
-      setStatus('complete')
     }
-  }, [bankName, period, filesProcessed])
+  }, [bankName, period, filesProcessed, transactions])
 
   /**
    * Reset to initial state

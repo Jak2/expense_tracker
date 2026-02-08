@@ -116,6 +116,11 @@ npm run dev
 | Enhanced Excel | 5-sheet workbook | Done |
 | Improved PDF | Webapp-matching layout | Done |
 
+### Bug Fixes (v1.3.1)
+| Feature | Description | Status |
+|---------|-------------|--------|
+| Add More Merge Fix | Fixed issue where 2nd file replaced 1st file's data | Done |
+
 ---
 
 ## Tech Stack
@@ -324,20 +329,34 @@ expenses/
 Users can upload multiple bank statement files and combine results.
 
 ```javascript
-// App.jsx - Processing additional files
+// App.jsx - Processing additional files (v1.3.1 fixed version)
 const processAdditionalFiles = async (files) => {
+  // Capture current transactions BEFORE processing
+  const currentTransactions = [...transactions]
+
+  let newTransactions = []
   for (const file of files) {
-    const result = await processFileInternal(file)
-    // Append transactions to existing array
-    setTransactions(prev => [...prev, ...result.transactions])
+    // Pass false to NOT update global status (keeps results visible)
+    const result = await processFileInternal(file, false)
+    newTransactions = [...newTransactions, ...result.transactions]
   }
+
+  // Merge existing + new transactions
+  setTransactions([...currentTransactions, ...newTransactions])
 }
 ```
+
+**Key Implementation Details:**
+- `processFileInternal(file, updateStatus)` - Second parameter controls whether to change global `status`
+- When `updateStatus = false`, the results section stays visible during processing
+- Transactions are captured at start to prevent state loss during async operations
+- Each file's transactions get unique IDs to prevent conflicts
 
 **UI Flow:**
 1. User uploads first file → Results displayed
 2. Click "Add More" button → Select additional files
-3. New transactions appended → Combined analytics
+3. Blue banner shows "Processing additional files..."
+4. New transactions appended → Combined analytics
 
 ### 2. Category Classification
 
@@ -689,6 +708,7 @@ LIFETIME ($29):
 | Response truncated | Token limit | Uses salvage logic automatically |
 | OCR poor quality | Low resolution image | Use clearer, higher resolution images |
 | Charts not in PDF | DOM not ready | Charts captured from visible DOM |
+| Add More replaces data | v1.3.0 bug | Fixed in v1.3.1 - update your code |
 
 ### Debug Commands
 
@@ -745,6 +765,12 @@ console.log('Transactions:', transactions)
 - [x] Enhanced Excel (5 sheets)
 - [x] Improved PDF layout
 
+### Phase 4.1: Bug Fixes
+- [x] Fixed "Add More" replacing data instead of merging
+  - Added `updateStatus` parameter to `processFileInternal()`
+  - Capture transactions before async processing
+  - Keep status as 'complete' during additional file processing
+
 ### Future Roadmap
 - [ ] Dark mode
 - [ ] Transaction search/filter
@@ -786,4 +812,4 @@ For questions or issues:
 
 ---
 
-*Last updated: February 2024*
+*Last updated: February 2025*
