@@ -164,109 +164,81 @@ npm run dev
 
 ### System Overview
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           USER'S BROWSER                                 │
-│                                                                          │
-│  ┌─────────────────────────────────────────────────────────────────────┐│
-│  │                         React Application                            ││
-│  │                                                                      ││
-│  │   ┌─────────────┐  ┌──────────────┐  ┌─────────────┐               ││
-│  │   │   Upload    │  │  Analytics   │  │   Export    │               ││
-│  │   │   Screen    │  │  Dashboard   │  │   Options   │               ││
-│  │   └──────┬──────┘  └──────▲───────┘  └──────┬──────┘               ││
-│  │          │                │                  │                      ││
-│  │          ▼                │                  ▼                      ││
-│  │   ┌──────────────────────┴──────────────────────────┐              ││
-│  │   │              App State (React useState)          │              ││
-│  │   │  • transactions[]  • bankName  • period          │              ││
-│  │   │  • status  • error  • progress                   │              ││
-│  │   └──────────────────────┬──────────────────────────┘              ││
-│  │                          │                                          ││
-│  └──────────────────────────┼──────────────────────────────────────────┘│
-│                             │                                            │
-│  ┌──────────────────────────┼──────────────────────────────────────────┐│
-│  │                   Processing Pipeline                                ││
-│  │                          │                                           ││
-│  │   ┌──────────┐    ┌──────▼──────┐    ┌───────────┐    ┌──────────┐ ││
-│  │   │  File    │───▶│  PDF.js     │───▶│ Tesseract │───▶│  Gemini  │ ││
-│  │   │  Input   │    │ (if PDF)    │    │   OCR     │    │   API    │ ││
-│  │   └──────────┘    └─────────────┘    └───────────┘    └────┬─────┘ ││
-│  │                                                             │       ││
-│  │   ┌──────────────────────────────────────────────────────────┐     ││
-│  │   │                    Export Pipeline                        │     ││
-│  │   │   ┌─────────┐    ┌─────────┐    ┌─────────┐             │     ││
-│  │   │   │   CSV   │    │  Excel  │    │   PDF   │             │     ││
-│  │   │   │ Export  │    │ (5 sheets)   │ Report  │             │     ││
-│  │   │   └─────────┘    └─────────┘    └─────────┘             │     ││
-│  │   └──────────────────────────────────────────────────────────┘     ││
-│  └──────────────────────────────────────────────────────────────────────┘│
-│                                                                          │
-│  ┌──────────────────────────────────────────────────────────────────────┐│
-│  │                        localStorage                                   ││
-│  │  • API Key (obfuscated with base64)                                  ││
-│  └──────────────────────────────────────────────────────────────────────┘│
-└──────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    │ HTTPS
-                                    ▼
-                     ┌──────────────────────────────┐
-                     │      Google Gemini API       │
-                     │     (gemini-2.5-flash)       │
-                     └──────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph BROWSER["User's Browser"]
+        subgraph REACT["React Application"]
+            UPLOAD["Upload Screen"]
+            ANALYTICS["Analytics Dashboard"]
+            EXPORT["Export Options"]
+
+            UPLOAD --> STATE
+            STATE --> ANALYTICS
+            STATE --> EXPORT
+
+            STATE["App State\n• transactions[]\n• bankName / period\n• status / error / progress"]
+        end
+
+        subgraph PIPELINE["Processing Pipeline"]
+            FILE_INPUT["File Input"] --> PDFJS["PDF.js\n(if PDF)"]
+            PDFJS --> OCR["Tesseract.js\nOCR"]
+            OCR --> GEMINI_CALL["Gemini API Call"]
+        end
+
+        subgraph EXPORTS["Export Pipeline"]
+            CSV["CSV Export"]
+            EXCEL["Excel\n(5 Sheets)"]
+            PDF_REPORT["PDF Report"]
+        end
+
+        subgraph STORAGE["localStorage"]
+            API_KEY["API Key\n(base64 obfuscated)"]
+        end
+
+        STATE --> PIPELINE
+        GEMINI_CALL --> STATE
+        STATE --> EXPORTS
+    end
+
+    GEMINI_CALL <-->|HTTPS| GEMINI["Google Gemini API\n(gemini-2.5-flash)"]
 ```
 
 ### Data Flow
 
-```
-1. USER UPLOADS FILE(S)
-   │
-   ├─▶ Validate file type (PNG, JPG, WEBP, PDF)
-   ├─▶ Validate file size (≤ 20MB)
-   │
-   ▼
-2. FILE PROCESSING
-   │
-   ├─▶ Is PDF?
-   │      │
-   │     Yes ──▶ pdf.js converts each page to image
-   │      │
-   │     No
-   │      │
-   ▼      ▼
-3. OCR EXTRACTION (Tesseract.js)
-   │
-   ├─▶ Extract text from image(s)
-   ├─▶ Combine multi-page text
-   │
-   ▼
-4. AI PROCESSING (Gemini API)
-   │
-   ├─▶ Send OCR text with structured prompt
-   ├─▶ Receive JSON with transactions
-   ├─▶ Auto-categorize (14 categories)
-   ├─▶ Classify cost type (fixed/variable)
-   │
-   ▼
-5. DISPLAY RESULTS
-   │
-   ├─▶ Analytics Dashboard
-   │   ├─▶ Executive Summary
-   │   ├─▶ 6 Metric Cards
-   │   ├─▶ Category Bar Chart
-   │   └─▶ Fixed/Variable Pie Chart
-   │
-   ├─▶ Transaction Table
-   │   ├─▶ Sortable columns
-   │   ├─▶ Inline editing
-   │   └─▶ Row deletion
-   │
-   ▼
-6. EXPORT OPTIONS
-   │
-   ├─▶ CSV (basic data)
-   ├─▶ Excel (5 sheets)
-   └─▶ PDF Report (formatted)
+```mermaid
+flowchart TD
+    A["1. User Uploads File(s)"] --> B{"Validate"}
+    B -->|"Type: PNG, JPG, WEBP, PDF\nSize: ≤ 20MB"| C{"Is PDF?"}
+
+    C -->|Yes| D["PDF.js converts\neach page to image"]
+    C -->|No| E["Use image directly"]
+
+    D --> F["2. OCR Extraction\n(Tesseract.js)"]
+    E --> F
+
+    F -->|"Extract & combine\nmulti-page text"| G["3. AI Processing\n(Gemini API)"]
+
+    G -->|"Structured prompt\n→ JSON response"| H["Auto-categorize\n(14 categories)"]
+    H --> I["Classify cost type\n(fixed / variable)"]
+
+    I --> J["4. Display Results"]
+
+    J --> K["Analytics Dashboard"]
+    J --> L["Transaction Table"]
+
+    K --> K1["Executive Summary"]
+    K --> K2["6 Metric Cards"]
+    K --> K3["Category Bar Chart"]
+    K --> K4["Fixed/Variable Pie Chart"]
+
+    L --> L1["Sortable columns"]
+    L --> L2["Inline editing"]
+    L --> L3["Row deletion"]
+
+    J --> M["5. Export Options"]
+    M --> M1["CSV (basic data)"]
+    M --> M2["Excel (5 sheets)"]
+    M --> M3["PDF Report (formatted)"]
 ```
 
 ---
@@ -381,44 +353,52 @@ AI automatically classifies each transaction into 14 categories:
 
 ### 3. Fixed vs Variable Costs
 
-```
-FIXED COSTS (Essential/Recurring):
-├── Rent & Housing
-├── Insurance
-├── Subscriptions
-└── Utilities
+```mermaid
+flowchart LR
+    COSTS["All Costs"] --> FIXED["Fixed Costs\n(Essential / Recurring)"]
+    COSTS --> VARIABLE["Variable Costs\n(Discretionary)"]
 
-VARIABLE COSTS (Discretionary):
-├── Food & Dining
-├── Shopping
-├── Entertainment
-└── Transport
+    FIXED --> F1["Rent & Housing"]
+    FIXED --> F2["Insurance"]
+    FIXED --> F3["Subscriptions"]
+    FIXED --> F4["Utilities"]
+
+    VARIABLE --> V1["Food & Dining"]
+    VARIABLE --> V2["Shopping"]
+    VARIABLE --> V3["Entertainment"]
+    VARIABLE --> V4["Transport"]
+
+    style FIXED fill:#fee2e2,stroke:#ef4444
+    style VARIABLE fill:#dcfce7,stroke:#22c55e
 ```
 
 ### 4. Analytics Dashboard
 
 The dashboard displays:
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│  EXECUTIVE SUMMARY (Blue Banner)                            │
-│  "Cash Flow Positive by ₹45,000. Top category: Food..."    │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+block-beta
+    columns 6
 
-┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐
-│ Income  │ │Expenses │ │Net Flow │ │Burn Rate│ │ Fixed   │ │ Period  │
-│₹100,000 │ │ ₹55,000 │ │₹45,000  │ │₹1,833/d │ │₹15,000  │ │ 30 days │
-└─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘
+    SUMMARY["Executive Summary (Blue Banner)\nCash Flow Positive by ₹45,000. Top category: Food..."]:6
 
-┌──────────────────────────┐  ┌──────────────────────────┐
-│   CATEGORY BAR CHART     │  │   FIXED/VARIABLE PIE     │
-│   ████████ Food          │  │      ┌───────┐           │
-│   ██████ Shopping        │  │     /  RED   \           │
-│   ████ Transport         │  │    (  35%    )           │
-│   ███ Utilities          │  │     \       /            │
-│   ██ Entertainment       │  │      \GREEN/             │
-│                          │  │       65%                │
-└──────────────────────────┘  └──────────────────────────┘
+    INCOME["Income\n₹100,000"]
+    EXPENSES["Expenses\n₹55,000"]
+    NETFLOW["Net Flow\n₹45,000"]
+    BURNRATE["Burn Rate\n₹1,833/day"]
+    FIXED["Fixed Costs\n₹15,000"]
+    PERIOD["Period\n30 days"]
+
+    BARCHART["Category Bar Chart\n(Top spending categories)"] :3
+    PIECHART["Fixed vs Variable Pie Chart\n(35% Fixed / 65% Variable)"] :3
+
+    style SUMMARY fill:#dbeafe,stroke:#3b82f6
+    style INCOME fill:#dcfce7,stroke:#22c55e
+    style EXPENSES fill:#fee2e2,stroke:#ef4444
+    style NETFLOW fill:#f0fdf4,stroke:#16a34a
+    style BURNRATE fill:#fef9c3,stroke:#eab308
+    style FIXED fill:#fce7f3,stroke:#ec4899
+    style PERIOD fill:#e0e7ff,stroke:#6366f1
 ```
 
 ### 5. Export Formats
@@ -452,63 +432,43 @@ Professional formatted report with:
 
 ### First-Time User
 
-```
-1. Open app
-   │
-   ▼
-2. See API Key input screen
-   │
-   ├─▶ Click "Get Free API Key" link
-   ├─▶ Create key at Google AI Studio
-   ├─▶ Paste key into input
-   ├─▶ Key validated against Gemini API
-   │
-   ▼
-3. See Upload screen
+```mermaid
+flowchart TD
+    A["Open App"] --> B["See API Key Input Screen"]
+    B --> C["Click 'Get Free API Key' link"]
+    C --> D["Create key at Google AI Studio"]
+    D --> E["Paste key into input"]
+    E --> F{"Key validated\nagainst Gemini API"}
+    F -->|Valid| G["See Upload Screen"]
+    F -->|Invalid| B
 ```
 
 ### Processing Flow
 
-```
-1. Drag & drop file (or click to browse)
-   │
-   ▼
-2. See processing indicator
-   ├─▶ "Reading file..." (10%)
-   ├─▶ "Extracting text (OCR)..." (10-50%)
-   ├─▶ "Analyzing with AI..." (50-90%)
-   │
-   ▼
-3. See results
-   ├─▶ Analytics Dashboard
-   ├─▶ Transaction Table
-   │
-   ▼
-4. Optional: Edit transactions
-   │
-   ▼
-5. Export (CSV / Excel / PDF)
+```mermaid
+flowchart TD
+    A["Drag & drop file\n(or click to browse)"] --> B["Reading file... (10%)"]
+    B --> C["Extracting text via OCR... (10-50%)"]
+    C --> D["Analyzing with AI... (50-90%)"]
+    D --> E["Results Displayed"]
+    E --> F["Analytics Dashboard"]
+    E --> G["Transaction Table"]
+    G --> H["Optional: Edit transactions"]
+    H --> I["Export"]
+    I --> I1["CSV"]
+    I --> I2["Excel"]
+    I --> I3["PDF"]
 ```
 
 ### Adding More Files
 
-```
-1. Have existing results
-   │
-   ▼
-2. Click "Add More" button
-   │
-   ▼
-3. Select additional file(s)
-   │
-   ▼
-4. See "Processing additional files..." indicator
-   │
-   ▼
-5. New transactions appended
-   │
-   ▼
-6. Analytics recalculated
+```mermaid
+flowchart TD
+    A["Have existing results"] --> B["Click 'Add More' button"]
+    B --> C["Select additional file(s)"]
+    C --> D["Processing additional files...\n(results stay visible)"]
+    D --> E["New transactions appended"]
+    E --> F["Analytics recalculated\nwith combined data"]
 ```
 
 ---
@@ -550,37 +510,33 @@ Transport         ₹8,000    14.5%
 ```
 
 ### PDF Report Structure
-```
-Page 1:
-┌─────────────────────────────────────────┐
-│    FINANCIAL SUMMARY REPORT             │
-│    Bank Name | Statement Period         │
-│    Generated: Date                      │
-│                                         │
-│    [EXECUTIVE SUMMARY BOX - Blue]       │
-│                                         │
-│    KEY METRICS                          │
-│    Income: ₹100,000  | Burn Rate: ₹1,833│
-│    Expenses: ₹55,000 | Fixed: ₹15,000   │
-│    Net Flow: ₹45,000 | Variable: ₹40,000│
-│                                         │
-│    SPENDING BY CATEGORY                 │
-│    [Category Table]                     │
-│                                         │
-│    VISUAL ANALYTICS                     │
-│    [Chart Images if captured]           │
-└─────────────────────────────────────────┘
 
-Page 2+:
-┌─────────────────────────────────────────┐
-│    TRANSACTION DETAILS                  │
-│    [Full Transaction Table]             │
-│    ...                                  │
-│    TOTAL: ₹55,000 | ₹100,000           │
-│                                         │
-│    Generated by Financial Parser        │
-│                           Page X        │
-└─────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph PAGE1["Page 1"]
+        direction TB
+        HEADER["Financial Summary Report\nBank Name | Statement Period\nGenerated: Date"]
+        EXEC["Executive Summary Box\n(Blue background)"]
+        METRICS["Key Metrics (2-column layout)\nIncome: ₹100,000 | Burn Rate: ₹1,833/day\nExpenses: ₹55,000 | Fixed: ₹15,000\nNet Flow: ₹45,000 | Variable: ₹40,000"]
+        CATS["Spending by Category\n(Category breakdown table)"]
+        CHARTS["Visual Analytics\n(Captured chart images)"]
+
+        HEADER --> EXEC --> METRICS --> CATS --> CHARTS
+    end
+
+    subgraph PAGE2["Page 2+"]
+        direction TB
+        TXNS["Transaction Details\n(Full transaction table)"]
+        TOTALS["Totals Row\nDebit: ₹55,000 | Credit: ₹100,000"]
+        FOOTER["Generated by Financial Parser\nPage X"]
+
+        TXNS --> TOTALS --> FOOTER
+    end
+
+    PAGE1 --> PAGE2
+
+    style EXEC fill:#dbeafe,stroke:#3b82f6
+    style HEADER fill:#f8fafc,stroke:#94a3b8
 ```
 
 ---
@@ -660,30 +616,42 @@ docker run -p 8080:80 financial-parser
 
 ### Strategy 1: Freemium
 
-```
-FREE TIER:
-├── 5 extractions per day
-├── Basic CSV export
-└── Watermark on PDF exports
+```mermaid
+flowchart LR
+    subgraph FREE["Free Tier"]
+        F1["5 extractions/day"]
+        F2["Basic CSV export"]
+        F3["Watermark on PDF"]
+    end
 
-PRO ($9/month):
-├── Unlimited extractions
-├── Excel & PDF exports
-├── No watermark
-├── Priority support
-└── Custom categories
+    subgraph PRO["Pro - $9/month"]
+        P1["Unlimited extractions"]
+        P2["Excel & PDF exports"]
+        P3["No watermark"]
+        P4["Priority support"]
+        P5["Custom categories"]
+    end
+
+    style FREE fill:#f0fdf4,stroke:#22c55e
+    style PRO fill:#dbeafe,stroke:#3b82f6
 ```
 
 ### Strategy 2: One-Time Purchase
 
-```
-FREE:
-├── Full features
-└── Limited to 3 files total
+```mermaid
+flowchart LR
+    subgraph FREE2["Free"]
+        A1["Full features"]
+        A2["Limited to 3 files"]
+    end
 
-LIFETIME ($29):
-├── Unlimited forever
-└── All future features
+    subgraph LIFETIME["Lifetime - $29"]
+        B1["Unlimited forever"]
+        B2["All future features"]
+    end
+
+    style FREE2 fill:#f0fdf4,stroke:#22c55e
+    style LIFETIME fill:#fef3c7,stroke:#f59e0b
 ```
 
 ### Cost Structure
